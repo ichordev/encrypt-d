@@ -1,7 +1,5 @@
 module encrypt.aes;
 
-import core.stdc.string: memset, memcpy; // CBC mode, for memset
-
 version = AES128;
 //version = AES192
 //version = AES256
@@ -86,67 +84,54 @@ const(ubyte)[11] Rcon = [0x8D, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0
 
 ///Produces Nb(Nr+1) round keys. The round keys are used in each round to decrypt the states. 
 static void KeyExpansion(ubyte[] RoundKey, const ubyte[] Key){
-	uint i, j, k;
-	ubyte[4] tempa; // Used for the column/row operations
-	
-	// The first round key is the key itself.
-	for(i = 0; i < Nk; ++i){
+	//the first round key is the key itself.
+	for(uint i = 0; i < Nk; i++){
 		RoundKey[(i * 4) + 0] = Key[(i * 4) + 0];
 		RoundKey[(i * 4) + 1] = Key[(i * 4) + 1];
 		RoundKey[(i * 4) + 2] = Key[(i * 4) + 2];
 		RoundKey[(i * 4) + 3] = Key[(i * 4) + 3];
 	}
 	
-	// All other round keys are found from the previous round keys.
-	for(i = Nk; i < Nb * (Nr + 1); ++i){
-		k = (i - 1) * 4;
-		tempa[0]=RoundKey[k + 0];
-		tempa[1]=RoundKey[k + 1];
-		tempa[2]=RoundKey[k + 2];
-		tempa[3]=RoundKey[k + 3];
+	//all other round keys are found from the previous round keys.
+	for(uint i = Nk; i < Nb * (Nr + 1); i++){
+		uint k = (i - 1) * 4;
+		ubyte[4] temp = [
+			RoundKey[k+0],
+			RoundKey[k+1],
+			RoundKey[k+2],
+			RoundKey[k+3],
+		];
 		
 		if(i % Nk == 0){
-			// This function shifts the 4 bytes in a word to the left once.
-			// [a0,a1,a2,a3] becomes [a1,a2,a3,a0]
+			//shift the 4 bytes in a word to the left once.
+			//[a0,a1,a2,a3] becomes [a1,a2,a3,a0]
+			const temp0 = temp[0];
+			temp[0] = temp[1];
+			temp[1] = temp[2];
+			temp[2] = temp[3];
+			temp[3] = temp0;
 			
-			// Function RotWord()
-			{
-				const ubyte u8tmp = tempa[0];
-				tempa[0] = tempa[1];
-				tempa[1] = tempa[2];
-				tempa[2] = tempa[3];
-				tempa[3] = u8tmp;
-			}
+			//apply the S-box to each of the four bytes to produce an output word.
+			temp[0] = sbox[temp[0]];
+			temp[1] = sbox[temp[1]];
+			temp[2] = sbox[temp[2]];
+			temp[3] = sbox[temp[3]];
 			
-			// SubWord() is a function that takes a four-byte input word and 
-			// applies the S-box to each of the four bytes to produce an output word.
-			
-			// Function Subword()
-			{
-				tempa[0] = sbox[tempa[0]];
-				tempa[1] = sbox[tempa[1]];
-				tempa[2] = sbox[tempa[2]];
-				tempa[3] = sbox[tempa[3]];
-			}
-			
-			tempa[0] = tempa[0] ^ Rcon[i/Nk];
+			temp[0] = temp[0] ^ Rcon[i/Nk];
 		}
 		version(AES256){
 		if(i % Nk == 4){
-			// Function Subword()
-			{
-				tempa[0] = sbox[tempa[0]];
-				tempa[1] = sbox[tempa[1]];
-				tempa[2] = sbox[tempa[2]];
-				tempa[3] = sbox[tempa[3]];
-			}
+			temp[0] = sbox[temp[0]];
+			temp[1] = sbox[temp[1]];
+			temp[2] = sbox[temp[2]];
+			temp[3] = sbox[temp[3]];
 		}
 		}
-		j = i * 4; k = (i - Nk) * 4;
-		RoundKey[j + 0] = RoundKey[k + 0] ^ tempa[0];
-		RoundKey[j + 1] = RoundKey[k + 1] ^ tempa[1];
-		RoundKey[j + 2] = RoundKey[k + 2] ^ tempa[2];
-		RoundKey[j + 3] = RoundKey[k + 3] ^ tempa[3];
+		uint j = i * 4; k = (i - Nk) * 4;
+		RoundKey[j + 0] = RoundKey[k + 0] ^ temp[0];
+		RoundKey[j + 1] = RoundKey[k + 1] ^ temp[1];
+		RoundKey[j + 2] = RoundKey[k + 2] ^ temp[2];
+		RoundKey[j + 3] = RoundKey[k + 3] ^ temp[3];
 	}
 }
 
@@ -155,9 +140,8 @@ Adds the round key to state.
 The round key is added to the state by an XOR function.
 */
 void AddRoundKey(ubyte round, ref state_t state, const(ubyte)[] RoundKey){
-	ubyte i, j;
-	for(i = 0; i < 4; ++i){
-		for(j = 0; j < 4; ++j){
+	for(ubyte i = 0; i < 4; i++){
+		for(ubyte j = 0; j < 4; j++){
 			state[i][j] ^= RoundKey[(round * Nb * 4) + (i * Nb) + j];
 		}
 	}
@@ -165,9 +149,8 @@ void AddRoundKey(ubyte round, ref state_t state, const(ubyte)[] RoundKey){
 
 ///Substitutes the values in the state matrix with values in an S-box.
 void SubBytes(ref state_t state){
-	ubyte i, j;
-	for(i = 0; i < 4; ++i){
-		for(j = 0; j < 4; ++j){
+	for(ubyte i = 0; i < 4; i++){
+		for(ubyte j = 0; j < 4; j++){
 			state[j][i] = sbox[state[j][i]];
 		}
 	}
@@ -211,15 +194,14 @@ ubyte xtime(ubyte x){
 
 ///Mixes the columns of the state matrix.
 void MixColumns(ref state_t state){
-	ubyte i;
-	ubyte Tmp, Tm, t;
-	for(i = 0; i < 4; ++i){
+	ubyte tmp, tm, t;
+	for(ubyte i = 0; i < 4; i++){
 		t   = state[i][0];
-		Tmp = state[i][0] ^ state[i][1] ^ state[i][2] ^ state[i][3];
-		Tm  = state[i][0] ^ state[i][1]; Tm = xtime(Tm); state[i][0] ^= Tm ^ Tmp;
-		Tm  = state[i][1] ^ state[i][2]; Tm = xtime(Tm); state[i][1] ^= Tm ^ Tmp;
-		Tm  = state[i][2] ^ state[i][3]; Tm = xtime(Tm); state[i][2] ^= Tm ^ Tmp;
-		Tm  = state[i][3] ^ t ;          Tm = xtime(Tm); state[i][3] ^= Tm ^ Tmp;
+		tmp = state[i][0] ^ state[i][1] ^ state[i][2] ^ state[i][3];
+		tm  = state[i][0] ^ state[i][1]; tm = xtime(tm); state[i][0] ^= tm ^ tmp;
+		tm  = state[i][1] ^ state[i][2]; tm = xtime(tm); state[i][1] ^= tm ^ tmp;
+		tm  = state[i][2] ^ state[i][3]; tm = xtime(tm); state[i][2] ^= tm ^ tmp;
+		tm  = state[i][3] ^ t;           tm = xtime(tm); state[i][3] ^= tm ^ tmp;
 	}
 }
 
@@ -239,13 +221,11 @@ The method used to multiply may be difficult to understand for the inexperienced
 Please use the references to gain more information.
 */
 void InvMixColumns(ref state_t state){
-	int i;
-	ubyte a, b, c, d;
-	for(i = 0; i < 4; ++i){ 
-		a = state[i][0];
-		b = state[i][1];
-		c = state[i][2];
-		d = state[i][3];
+	for(int i = 0; i < 4; i++){ 
+		ubyte a = state[i][0];
+		ubyte b = state[i][1];
+		ubyte c = state[i][2];
+		ubyte d = state[i][3];
 		
 		state[i][0] = Multiply(a, 0x0E) ^ Multiply(b, 0x0B) ^ Multiply(c, 0x0D) ^ Multiply(d, 0x09);
 		state[i][1] = Multiply(a, 0x09) ^ Multiply(b, 0x0E) ^ Multiply(c, 0x0B) ^ Multiply(d, 0x0D);
@@ -257,9 +237,8 @@ void InvMixColumns(ref state_t state){
 
 ///Substitutes the values in the state matrix with values in an S-box.
 void InvSubBytes(ref state_t state){
-	ubyte i, j;
-	for(i = 0; i < 4; ++i){
-		for(j = 0; j < 4; ++j){
+	for(ubyte i = 0; i < 4; i++){
+		for(ubyte j = 0; j < 4; j++){
 			state[j][i] = rsbox[state[j][i]];
 		}
 	}
@@ -327,7 +306,7 @@ void InvCipher(ref state_t state, const(ubyte)[] RoundKey){
 	// The first Nr-1 rounds are identical.
 	// These Nr rounds are executed in the loop below.
 	// Last one without InvMixColumn()
-	for(round = (Nr - 1); ; --round){
+	for(round = (Nr - 1); ; round--){
 		InvShiftRows(state);
 		InvSubBytes(state);
 		AddRoundKey(round, state, RoundKey);
@@ -341,7 +320,7 @@ void InvCipher(ref state_t state, const(ubyte)[] RoundKey){
 
 void XorWithIv(ref ubyte[AES_BLOCKLEN] buf, const ubyte[AES_BLOCKLEN] iv){
 	//the block in AES is always 128bit no matter the key size
-	for(ubyte i = 0; i < AES_BLOCKLEN; ++i){
+	for(ubyte i = 0; i < AES_BLOCKLEN; i++){
 		buf[i] ^= iv[i];
 	}
 }
@@ -354,7 +333,7 @@ void AES_init_ctx(ref AES_ctx ctx, const ubyte[AES_KEYLEN] key){
 
 void AES_init_ctx_iv(ref AES_ctx ctx, const ubyte[AES_KEYLEN] key, const ubyte[AES_BLOCKLEN] iv){
 	KeyExpansion(ctx.RoundKey, key);
-	memcpy(ctx.iv.ptr, iv.ptr, AES_BLOCKLEN);
+	ctx.iv[] = iv;
 }
 
 void AES_ctx_set_iv(ref AES_ctx ctx, const ubyte[AES_BLOCKLEN] iv){
@@ -371,24 +350,24 @@ void AES_ECB_decrypt(ref const AES_ctx ctx, ref ubyte[AES_BLOCKLEN] buf){
 	InvCipher(cast(state_t)buf, ctx.RoundKey);
 }
 
-void AES_CBC_encrypt_buffer(ref AES_ctx ctx, ubyte[] buf, size_t length){
+void AES_CBC_encrypt_buffer(ref AES_ctx ctx, ref ubyte[] buf){
 	size_t i;
 	ubyte[AES_BLOCKLEN] iv = ctx.iv;
-	for (i = 0; i < length; i += AES_BLOCKLEN){
+	for(i = 0; i < buf.length; i += AES_BLOCKLEN){
 		ubyte[AES_BLOCKLEN] bufX = buf[i..i+AES_BLOCKLEN];
 		XorWithIv(bufX, iv);
 		Cipher(cast(state_t)bufX, ctx.RoundKey);
 		iv[] = bufX;
 		buf[i..i+AES_BLOCKLEN] = bufX;
 	}
-	/* store iv in ctx for next call */
-	memcpy(ctx.iv.ptr, iv.ptr, AES_BLOCKLEN);
+	//store iv in ctx for next call
+	ctx.iv[] = iv;
 }
 
-void AES_CBC_decrypt_buffer(ref AES_ctx ctx, ubyte[] buf, size_t length){
+void AES_CBC_decrypt_buffer(ref AES_ctx ctx, ref ubyte[] buf){
 	size_t i;
 	ubyte[AES_BLOCKLEN] storeNextIv;
-	for (i = 0; i < length; i += AES_BLOCKLEN){
+	for(i = 0; i < buf.length; i += AES_BLOCKLEN){
 		ubyte[AES_BLOCKLEN] bufX = buf[i..i+AES_BLOCKLEN];
 		storeNextIv[] = bufX;
 		InvCipher(cast(state_t)bufX, ctx.RoundKey);
@@ -402,16 +381,16 @@ void AES_CBC_decrypt_buffer(ref AES_ctx ctx, ubyte[] buf, size_t length){
 Symmetrical operation: same function for encrypting as for decrypting.
 Note any IV/nonce should never be reused with the same key
 */
-void AES_CTR_xcrypt_buffer(ref AES_ctx ctx, ubyte* buf, size_t length){
-	ubyte[AES_BLOCKLEN] buffer;
-	
+void AES_CTR_xcrypt_buffer(ref AES_ctx ctx, ref ubyte[] buf){
 	size_t i;
 	int bi;
-	for(i = 0, bi = AES_BLOCKLEN; i < length; ++i, ++bi){
+	ubyte[AES_BLOCKLEN] bufX;
+	for(i = 0, bi = AES_BLOCKLEN; i < buf.length; i++, bi++){
 		if(bi == AES_BLOCKLEN){
 			//we need to regen xor compliment in buffer
-			memcpy(buffer.ptr, ctx.iv.ptr, AES_BLOCKLEN);
-			Cipher(cast(state_t)buffer,ctx.RoundKey);
+			bufX = ctx.iv;
+			
+			Cipher(cast(state_t)bufX, ctx.RoundKey);
 			
 			//increment iv and handle overflow
 			for(bi = (AES_BLOCKLEN - 1); bi >= 0; --bi){
@@ -426,6 +405,6 @@ void AES_CTR_xcrypt_buffer(ref AES_ctx ctx, ubyte* buf, size_t length){
 			bi = 0;
 		}
 		
-		buf[i] = (buf[i] ^ buffer[bi]);
+		buf[i] = (buf[i] ^ bufX[bi]);
 	}
 }

@@ -1,4 +1,5 @@
 module encrypt;
 
 public import
-	encrypt.aes;
+	encrypt.aes,
+	encrypt.pkcs7;

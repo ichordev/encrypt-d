@@ -1,6 +1,6 @@
 {
 	"name": "encrypt",
-	"description": "A basic encryption library.",
+	"description": "AES encryption/decryption, compatible with BetterC, @nogc and nothrow.",
 	"authors": ["Aya Partridge"],
 	"license": "BSL-1.0",
 	

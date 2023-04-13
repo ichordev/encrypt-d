@@ -336,6 +336,9 @@ if(keyBits == 128 || keyBits == 192 || keyBits == 256){
 	}
 	
 	auto encryptCBC(ubyte[] buf){
+		if(!buf || buf.length % aesBlockSize != 0){
+			return null;
+		}
 		size_t i;
 		ubyte[aesBlockSize] iv = this.iv;
 		for(i = 0; i < buf.length; i += aesBlockSize){
@@ -383,6 +386,9 @@ if(keyBits == 128 || keyBits == 192 || keyBits == 256){
 	}
 	
 	auto decryptCBC(ubyte[] buf){
+		if(!buf || buf.length % aesBlockSize != 0){
+			return null;
+		}
 		size_t i;
 		ubyte[aesBlockSize] storeNextIv;
 		for(i = 0; i < buf.length; i += aesBlockSize){
@@ -434,6 +440,9 @@ if(keyBits == 128 || keyBits == 192 || keyBits == 256){
 	Note any IV/nonce should never be reused with the same key
 	*/
 	auto xcryptCTR(ubyte[] buf){
+		if(!buf || buf.length % aesBlockSize != 0){
+			return null;
+		}
 		size_t i;
 		int bi;
 		ubyte[aesBlockSize] bufX;

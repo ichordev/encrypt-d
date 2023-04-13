@@ -3,64 +3,66 @@ module encrypt.pkcs7;
 import encrypt.aes;
 
 nothrow @nogc pure @safe{
-	bool padPKCS7(B)(ref B buf, size_t dataSize, ubyte mod=aesBlockSize)
-	if(is(B: ubyte[]) || is(B BA: BA[n], size_t n)){
-		ubyte padByte = cast(ubyte)(mod - (dataSize % mod));
-		if(dataSize + padByte > buf.length){
-			return false;
+	bool padPKCS7(ubyte mod=aesBlockSize, B)(ref B buf, size_t dataSize)
+	if(is(B == ubyte[]) || is(B BA: BA[n], size_t n)){
+		static if(is(B == ubyte[])){
+			if(buf is null) return false;
+			if(buf.length % mod != 0) return false;
+		}else{
+			static assert(buf.length % mod == 0);
 		}
+		ubyte padByte = cast(ubyte)(mod - (dataSize % mod));
 		foreach(ref b; buf[dataSize..dataSize+padByte]){
 			b = padByte;
 		}
 		return true;
 	}
 	
-	bool isValidPKCS7(ubyte[] buf, size_t dataSize, ubyte mod=aesBlockSize){
+	bool isValidPKCS7(ubyte mod=aesBlockSize)(const ubyte[] buf, size_t dataSize){
 		ubyte expectedPadByte = cast(ubyte)(mod - (dataSize % mod));
-		if(dataSize + expectedPadByte > buf.length){
-			return false;
-		}
+		if(dataSize + expectedPadByte > buf.length) return false;
+		
 		foreach(const b; buf[dataSize..dataSize+expectedPadByte]){
-			if(b != expectedPadByte){
-				return false;
-			}
+			if(b != expectedPadByte) return false;
 		}
 		return true;
 	}
 	
-	size_t dataSizePKCS7(const ubyte[] buf, ubyte mod=aesBlockSize){
+	size_t dataSizePKCS7(ubyte mod=aesBlockSize)(const ubyte[] buf){
 		//test for valid buffer size
-		if(buf.length % mod != 0 || buf.length < mod){
-			return 0;
-		}
+		if(buf.length % mod != 0 || buf.length < mod) return 0;
 		ubyte padVal;
 		padVal = buf[$-1];
 		
 		//test for valid padding value
-		if(padVal < 1 || padVal > mod){
-			return 0;
-		}
+		if(padVal < 1 || padVal > mod) return 0;
+		
 		//buffer must be at least padding_value + 1 in size
-		if(buf.length < padVal + 1){
-			return 0;
-		}
+		if(buf.length < padVal + 1) return 0;
+		
 		foreach_reverse(const b; buf[$-padVal..$]){
-			if(b != padVal){
-				return 0;
-			}
+			if(b != padVal) return 0;
 		}
 		return buf.length - padVal;
+	}
+	
+	ubyte[] clipPKCS7(ubyte mod=aesBlockSize)(ubyte[] buf){
+		size_t size = dataSizePKCS7!mod(buf);
+		if(size == 0) return null;
+		return buf[0..size];
 	}
 	
 	@trusted unittest{
 		enum reportCT = "my super secret thing that needs to remain that way!";
 		ubyte[reportCT.length + aesBlockSize - (reportCT.length % aesBlockSize)] report;
 		report[0..reportCT.length] = cast(ubyte[])reportCT;
+		auto dlen = reportCT.length;
+		
 		enum keyCT = "thisIstheKey";
 		ubyte[keyCT.length + aesBlockSize - (keyCT.length % aesBlockSize)] key;
 		key[0..keyCT.length] = cast(ubyte[])keyCT;
-		auto dlen = reportCT.length;
 		auto klen = keyCT.length;
+		
 		
 		assert(!report.isValidPKCS7(dlen));
 		assert(!key.isValidPKCS7(klen));
@@ -82,15 +84,13 @@ nothrow @nogc pure @safe{
 		
 		auto aes = AES!128(key, iv);
 		
-		auto reportx = aes.encryptCBC(report);
-		assert(reportx);
+		assert(aes.encryptCBC(report));
 			
 		aes.iv[] = iv;
 		
-		auto reportd = aes.decryptCBC(reportx);
-		assert(reportd);
+		assert(aes.decryptCBC(report));
 		
-		size_t len = reportd.dataSizePKCS7();
-		assert(reportd[0..len] == cast(ubyte[])reportCT);
+		ubyte[] clipReport = report.clipPKCS7();
+		assert(clipReport == cast(ubyte[])reportCT);
 	}
 }
